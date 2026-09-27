@@ -715,6 +715,28 @@ function drawOne(){
 
 /* ---------------- image preload ---------------- */
 const IMG_CACHE = {};
+const MOSAIC_CACHE = {};
+function getMosaicTile(card){
+  if(MOSAIC_CACHE[card.id]) return MOSAIC_CACHE[card.id];
+  const img = IMG_CACHE[card.id];
+  if(!img || !img.naturalWidth) return null;
+  const tinyW = 18, tinyH = 24;
+  const tiny = document.createElement('canvas');
+  tiny.width = tinyW; tiny.height = tinyH;
+  const tctx = tiny.getContext('2d');
+  drawCoverImage(tctx, img, -tinyW*0.06, -tinyH*0.06, tinyW*1.12, tinyH*1.12);
+  try{
+    const idata = tctx.getImageData(0,0,tinyW,tinyH);
+    const d = idata.data;
+    for(let i=0;i<d.length;i+=4){
+      const gray = (d[i]*0.299 + d[i+1]*0.587 + d[i+2]*0.114) * 0.42;
+      d[i]=d[i+1]=d[i+2]=gray;
+    }
+    tctx.putImageData(idata,0,0);
+  }catch(e){ /* getImageData can fail in rare sandboxed contexts; tile stays unfiltered but overlay below still masks it */ }
+  MOSAIC_CACHE[card.id] = tiny;
+  return tiny;
+}
 function preloadImages(){
   const entries = Object.entries(window.CARD_IMAGES||{});
   return Promise.all(entries.map(([id,info])=> new Promise((resolve)=>{
@@ -790,14 +812,14 @@ function drawCardArt(canvas, card, opts){
   ctx.fillStyle = grad; ctx.fillRect(0,0,w,h);
 
   if(mosaic){
-    if(img && img.naturalWidth){
+    const tile = img && img.naturalWidth ? getMosaicTile(card) : null;
+    if(tile){
       ctx.save();
-      ctx.filter = 'grayscale(65%) blur(16px) brightness(45%)';
-      drawCoverImage(ctx, img, -w*0.06, -h*0.06, w*1.12, h*1.12);
-      ctx.filter = 'none';
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(tile, -w*0.06, -h*0.06, w*1.12, h*1.12);
       ctx.restore();
     }
-    ctx.fillStyle = 'rgba(4,7,16,.62)';
+    ctx.fillStyle = 'rgba(4,7,16,.72)';
     ctx.fillRect(0,0,w,h);
     ctx.strokeStyle = 'rgba(200,225,255,.28)';
     ctx.lineWidth = w*0.02;
